@@ -1,0 +1,8 @@
+node_modules/
+dist/
+.env
+.env.*
+
+# Network-filesystem tombstones (stale copies of replaced files) + macOS noise
+.smbdelete*
+.DS_Store
