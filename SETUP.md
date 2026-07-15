@@ -19,20 +19,24 @@ Everything is code or config — nothing from an old workspace needs migrating.
 1. New account → Business trial → Settings → Features → **Workers** → activate
 2. `ntn logout && ntn login` (auth against the NEW workspace)
 3. `npm run check && ntn workers deploy`
-4. `ntn workers sync trigger docs_index` → wait for `ntn workers sync status`
+4. Upload environment variables to the new worker:
+   ```bash
+   ntn workers env set NOTION_API_TOKEN=ntn_...       # personal access token for this workspace
+   ntn workers env set NOTION_API_BASE_URL=https://api.notion.com
+   ```
+   Create the token: workspace Settings → My connections → Develop or manage integrations.
+5. `ntn workers sync trigger docs_index` → wait for `ntn workers sync status`
    to finish (populates the KB + stamps First Seen dates for v8)
-5. Create a parent page (e.g. "DevQuest"), then:
-   `ntn workers exec setup_devquest -d '{"parent_page":"<page URL>"}'`
-6. Recreate content pages under it: **DevQuest Company Config** (paste
+6. Create a parent page (e.g. "DevQuest"), then:
+   `ntn workers exec setup_devquest -d '{"parent_page":"https://app.notion.com/p/DevQuest-39e11b195f6c80849a01df0e5e03f30d"}'`
+7. Recreate content pages under it: **DevQuest Company Config** (paste
    `test/fixtures/company-config-test.md` for the torture test, or the simple
    version from TEST-CHECKLIST §4) and team pages (Platform Team, etc.)
-7. **Share the parent page with the worker's connection** (••• → Connections)
+8. **Share the parent page with the worker's connection** (••• → Connections)
    so tools can see manually created pages — this caused the Platform Team
    miss last time
-8. Create the Custom Agent: paste `src/system-prompt.md`, attach all tools
+9. Create the Custom Agent: paste `src/system-prompt.md`, attach all tools
    except `setup_devquest`/`whoami`, auto-approve the write tools
-9. CLI token for exec testing: create a personal access token in the new
-   account → `ntn workers env set NOTION_API_TOKEN=ntn_...`
 10. Smoke test: `ntn workers exec read_team_context --local -d '{"team":"platform"}'`
     → expect found=true, then run one live agent conversation
 
