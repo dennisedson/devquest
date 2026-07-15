@@ -466,6 +466,18 @@ missing user identity to the docs/SDK version mismatch to the credits cliff.
 That catalogue *is* the developer advocate job, performed on the newest
 surface Notion has.
 
+**Aren't you pushing the platform harder than it's ready for?**
+Deliberately — and with the risk contained. Everything deterministic
+(13 tools, ranking, syncs, guide pages) is mine, tested, and passes a full
+E2E suite; the only fragile layer is the beta agent's conversational
+behavior, which is exactly the layer Notion owns and is investing in
+(External Agents API, Agent SDK, Dev Day roadmap). The architecture treats
+the agent as a thin skin over reliable machinery — the whole product runs
+via CLI with the agent removed. Building at the edge is what produced the
+fifteen findings; an app inside the comfort zone would have produced none.
+Where the edge crumbled, I didn't stop — I documented it, worked around it,
+and specified the fix. That's the job.
+
 ---
 
 ## Demo video
