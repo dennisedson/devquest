@@ -69,6 +69,11 @@ execute: async (input, { notion, user }) => {
 }
 ```
 
+**Empirical confirmation:** `users.me()` from a worker tool returns
+`owner: { type: "workspace", workspace: true }` — the token is
+workspace-owned with no connection to the person in the conversation.
+There is no path to user identity from the runtime token.
+
 With `user.id`, tools could create pages and immediately restrict permissions
 to just that user — making per-developer guide pages private by default.
 
@@ -88,6 +93,13 @@ says they're allowed).
 
 **What I'd propose:** Add `.optional()` to `SchemaBuilder` so properties can
 be omitted from the input entirely, matching standard JSON Schema behavior.
+
+**Related gotcha:** `outputSchema` is enforced strictly at runtime
+(`additionalProperties: false`). Adding a field to a tool's return value
+without updating its outputSchema doesn't just drop the field — it 400s the
+entire tool call (`InvalidToolOutputError`). Fine as a contract, but the
+failure mode punishes additive, backwards-compatible changes; a warn-and-strip
+mode would be friendlier.
 
 ### 4. `databases.update()` unreliable for adding properties
 
@@ -173,6 +185,14 @@ by exact title match client-side.
 (`worker.database({ type: "owned" })` with `db.pages.create()` from tools), or
 at minimum expose the managed database's runtime ID to tool contexts so
 discovery isn't title-string matching.
+
+**Observed failure mode of title discovery:** during testing, a *page* named
+"DevQuest Personas" existed but the *database* didn't — search filtered to
+`data_source` correctly returned nothing, and to the user this is
+indistinguishable from a bug ("the thing with that name is right there in my
+sidebar"). Pages and databases look identical in the sidebar; any design that
+keys on titles inherits that ambiguity. Stable IDs would eliminate the whole
+class.
 
 ### 9. Docs examples use the old API shape; the runtime SDK is v5
 

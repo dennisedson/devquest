@@ -1655,9 +1655,13 @@ function parseCompanyBlocks(blocks: Array<Record<string, unknown>>): Omit<Compan
 		if (!blockText.trim()) continue;
 		rawLines.push(blockText);
 
-		// Try to parse "Key: value, value, value" patterns
-		const match = blockText.match(/^\s*\**\s*(languages?|frameworks?|focus[\s_]?areas?|onboarding[\s_]?notes?)\s*\**\s*[:：]\s*(.+)/i);
-		if (match) {
+		// Parse "Key: value, value, value" patterns. A single Notion block can
+		// contain multiple lines (soft line breaks), so match per line — not
+		// just the first line of the block.
+		for (const line of blockText.split("\n")) {
+			const match = line.match(/^\s*\**\s*(languages?|frameworks?|focus[\s_]?areas?|onboarding[\s_]?notes?)\s*\**\s*[:：]\s*(.+)/i);
+			if (!match) continue;
+
 			const key = match[1].toLowerCase().replace(/\s+/g, "_").replace(/s$/, "") as string;
 			const value = match[2].trim();
 
@@ -1705,6 +1709,7 @@ worker.tool("read_company_context", {
 				frameworks: j.array(j.string()),
 				focus_areas: j.array(j.string()),
 				onboarding_notes: j.string(),
+				raw_content: j.string(),
 			}),
 		).describe("Team-specific configs found as child pages under the company config. If non-empty, the agent should ask which team the developer is on."),
 		detected_services: j.array(
