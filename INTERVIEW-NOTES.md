@@ -304,7 +304,7 @@ want to prototype before committing a team to Business. Alternatively, extend
 the Business trial period specifically for developers building integrations,
 or offer a free "developer workspace" through the Creator dashboard.
 
-### 11. No sandbox/testing tier for Custom Agents — credits gate all testing
+### 15. No sandbox/testing tier for Custom Agents — credits gate all testing
 
 **Problem:** When workspace AI credits run out, ALL Custom Agents pause. There
 is no free/sandbox tier for agent development, no per-agent budget, and no way
@@ -331,10 +331,30 @@ bring-your-own-key model via the External Agents API once it ships.
 | Version | Feature | Tools |
 |---|---|---|
 | **v1** | Adaptive persona + deterministic doc ranking | `setup_devquest`, `update_persona`, `find_persona`, `query_docs` |
-| **v2** | Living Guide Page (persistent Notion page with to-dos, session log) | `create_guide_page`, `read_guide_page`, `update_guide_page` |
+| **v1.1** | Multi-user personas keyed by developer name (upsert, normalized match) | built into persona tools |
+| **v2** | Living Guide Page (persistent Notion page with to-dos, session log, level-up detection) | `create_guide_page`, `read_guide_page`, `update_guide_page` |
 | **v3** | Company context (customize onboarding to company stack) | `read_company_context` |
+| **v3.5** | Team context — team pages found anywhere in the workspace, team overrides company | `read_team_context` (+ teams discovery in company config) |
 | **v4** | Pluggable doc sources (any llms.txt, OpenAPI, sitemap, markdown) | `add_doc_source` |
-| **v4+** | Auto-detect services from company config, schema migrations | Built into existing tools |
+| **v4+** | Auto-detect services from company config, schema migrations | built into existing tools |
+| **v5** | DevRel Insights digest — weekly persona/progress/content-gap analytics | `insights_digest` sync + Insights DB |
+| **v6** | Time to first success — verify the developer's first real API call | `verify_first_call` |
+| **v7** | Persona-aware starter code (install + snippet + endpoints per language × goal) | `get_starter_code` + guide "Start Coding" section |
+| **v8** | Change awareness — "since your last visit, these docs shipped" | First Seen tracking + `whats_new` in find_persona |
+| **testing** | CLI smoke suite + agent simulator (zero-credit E2E) | `simulate/` + `whoami` diagnostic |
+
+## By the numbers
+
+- **~3,300 lines** of TypeScript across 6 source modules; **13 tools, 2 syncs,
+  2 managed databases** in one Worker
+- **13 rules, 51 lines** — the entire conversational logic (`system-prompt.md`).
+  Zero decision trees in code.
+- **160+ docs** indexed from llms.txt, classified into 8 categories × 3
+  difficulties × 12 persona tags; extensible to any llms.txt/OpenAPI/sitemap
+- **0/10 overlap** between a beginner-Python-automation guide and an
+  advanced-TS-public-integration guide (deterministic, unit-tested)
+- **15 platform findings** documented with impact + proposed fixes
+- Full CLI E2E suite passes end to end (`simulate/smoke.sh`, 11 steps)
 
 ## Key design decisions worth discussing
 
@@ -363,27 +383,97 @@ bring-your-own-key model via the External Agents API once it ships.
    from +1). When a company config exists, the guide is genuinely shaped by
    the company's stack, not just lightly tinted.
 
+7. **The guide page is the artifact; chat is the pointer** — once the guide
+   exists, the agent leads with its link and never re-dumps content into chat.
+   Persistent, checkable, shareable output beats ephemeral chat responses.
+
+8. **The starter snippet and the verifier form one loop** — the generated code
+   creates a page titled "My first Notion API page"; `verify_first_call`
+   retrieves that exact page as proof of a working call. Onboarding ends at a
+   verified 200 OK, not at "read these links."
+
+9. **First-wins config parsing** — later prose lines like "Languages: French,
+   Italian (Paris office)" can't clobber the stack declaration at the top of
+   the config page. Discovered via a deliberately adversarial test fixture
+   (`test/fixtures/company-config-test.md`).
+
+10. **Prompt drift is fought mechanically, not just with prompt text** — tool
+    output contracts carry steering (e.g., `missing_fields` literally
+    instructs "end your reply with one question"), so behavior survives long
+    conversations where prompt attention fades. Found via live transcript
+    analysis: the agent stalled at 2/4 persona fields until rules 5/6 forced
+    completion momentum.
+
 ---
 
-## Demo flow (5 minutes)
+## What the platform got right (credit where due)
 
-1. **Cold start** (1 min): New developer says "I want to build an internal
-   dashboard in Python." Watch the agent infer fields, create persona, weave
-   in docs, and generate a guide page.
+- **The deploy loop is excellent.** `ntn workers deploy` from zero to running
+  capability in seconds; managed database schemas migrate automatically on
+  deploy.
+- **The CLI is genuinely agent-ready.** Our zero-credit simulator drives the
+  entire product through `ntn workers exec` — the "built for coding agents"
+  claim holds up in practice.
+- **Managed sync databases are a great primitive.** Locked synced properties +
+  user-editable extra columns solved data-integrity questions we never had to
+  think about. `pageContentMarkdown` on sync changes made the Insights digest
+  (metrics row + narrative body) nearly free.
+- **`exec --local` with `.env`** gives a tight inner dev loop without
+  deploying.
+- **Replace-mode syncs self-heal.** Notion retitled docs pages mid-project;
+  the next sync cycle absorbed the changes with zero code changes — which is
+  itself the v8 demo pitch working in the wild.
 
-2. **Contrast** (1 min): Different persona — "advanced TypeScript dev building
-   a public integration, fluent with REST APIs." Compare guide pages
-   side-by-side. Almost no doc overlap.
+---
 
-3. **Company context** (1 min): Show the DevQuest Company Config page. New
-   conversation — agent leads with company stack, auto-registers HubSpot
-   docs, guide skews toward company focus areas.
+## Anticipated panel questions (updated)
 
-4. **Returning developer** (1 min): Check off some to-dos on the guide page.
-   New conversation — agent reads progress, congratulates, refreshes the
-   reading path.
+**Why only four persona fields?**
+Every field must change the output or it doesn't exist. Four fields
+differentiate a Python beginner from a TypeScript expert — the minimum bar for
+personalization to feel real. When we needed more nuance, we didn't add fields;
+we made existing ones smarter (per-field difficulty modifiers).
 
-5. **The pitch** (1 min): This is what developer onboarding looks like when
-   it's adaptive, persistent, and built into the tool developers already use.
-   Every company's onboarding is different — DevQuest makes Notion the
-   platform that handles that.
+**How do you identify users without platform support?**
+Honestly: we don't, cryptographically. The agent knows who it's chatting with
+and passes the name as the persona key — normalized server-side, upsert
+semantics, verified empirically that the runtime token carries no user
+identity (`owner: workspace`). It's personalization-grade, not auth-grade, and
+the real fix is a one-line platform change we've specified (#2).
+
+**Why deterministic scoring instead of letting the LLM rank?**
+Consistency, cost, and testability. Two identical personas get identical
+reading paths — provable in unit tests, free to execute, and tunable by
+editing weights rather than prompt archaeology. The LLM decides when to query
+and how to present; the ranking itself never hallucinates. LLM re-ranking of
+the deterministic top-N is on the roadmap as a hybrid.
+
+**What breaks at scale?**
+Title-based discovery (fine for one workspace, fragile at install-scale —
+needs stable IDs, #8), the KB fetch-all ranking (fine at ~200 docs, needs
+filters/pagination at 10k), and name-keyed identity (collisions). All three
+have documented platform-level or roadmap fixes.
+
+**What would you build next?**
+The insights flywheel is the strategic direction: time-to-first-success
+per cohort, content-gap detection feeding docs prioritization, and rankings
+that learn from guide-page behavior. Onboarding is the wedge; documentation
+analytics is the product.
+
+**What did building this teach you about the platform?**
+Fifteen documented findings, each with impact and a proposed fix — from
+missing user identity to the docs/SDK version mismatch to the credits cliff.
+That catalogue *is* the developer advocate job, performed on the newest
+surface Notion has.
+
+---
+
+## Demo video
+
+Full narration + screen directions + staging checklist: **`VIDEO-SCRIPT.md`**.
+
+Beat structure (4:30–5:00): hook → problem → insight (tools for state, AI for
+reasoning; 13 rules, no decision tree) → cold start to guide page → **first
+success** (run the starter snippet, verify the real API call — the climax) →
+contrast (0/10 doc overlap) → company context (optional) → insights flywheel
+close ("docs comprehension analytics").
