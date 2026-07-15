@@ -3,6 +3,11 @@ dist/
 .env
 .env.*
 
-# Network-filesystem tombstones (stale copies of replaced files) + macOS noise
+# Next.js installer build output
+installer/.next/
+installer/node_modules/
+
+# Temp / macOS noise
+*.tmp
 .smbdelete*
 .DS_Store
