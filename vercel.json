@@ -1,0 +1,6 @@
+{
+  "buildCommand": "cd installer && npm install && npm run build",
+  "outputDirectory": "installer/.next",
+  "installCommand": "cd installer && npm install",
+  "framework": "nextjs"
+}
