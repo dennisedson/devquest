@@ -1,5 +1,5 @@
-import { Redis } from "@upstash/redis";
 import { randomBytes } from "crypto";
+import { getKv } from "./kv";
 
 export interface InstallRecord {
   installKey: string;
@@ -9,26 +9,6 @@ export interface InstallRecord {
   accessToken: string;
   refreshToken: string | null;
   updatedAt: string;
-}
-
-let redis: Redis | null = null;
-
-export function getRedis(): Redis {
-  if (!redis) {
-    // Vercel's Upstash marketplace integration injects UPSTASH_*; older
-    // Vercel KV setups inject KV_REST_API_* — accept either.
-    const url =
-      process.env.UPSTASH_REDIS_REST_URL ?? process.env.KV_REST_API_URL;
-    const token =
-      process.env.UPSTASH_REDIS_REST_TOKEN ?? process.env.KV_REST_API_TOKEN;
-    if (!url || !token) {
-      throw new Error(
-        "Missing Upstash Redis env vars (UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN)"
-      );
-    }
-    redis = new Redis({ url, token });
-  }
-  return redis;
 }
 
 const installKeyOf = (key: string) => `install:${key}`;
@@ -47,7 +27,7 @@ export async function saveAuthorization(data: {
   accessToken: string;
   refreshToken: string | null;
 }): Promise<InstallRecord> {
-  const r = getRedis();
+  const r = getKv();
   const existingKey = await r.get<string>(botKeyOf(data.botId));
   const installKey = existingKey ?? `dvq_${randomBytes(24).toString("hex")}`;
   const record: InstallRecord = {
@@ -63,7 +43,7 @@ export async function saveAuthorization(data: {
 export async function getInstall(
   installKey: string
 ): Promise<InstallRecord | null> {
-  return getRedis().get<InstallRecord>(installKeyOf(installKey));
+  return getKv().get<InstallRecord>(installKeyOf(installKey));
 }
 
 export async function updateTokens(
@@ -71,7 +51,7 @@ export async function updateTokens(
   accessToken: string,
   refreshToken: string | null
 ): Promise<void> {
-  const r = getRedis();
+  const r = getKv();
   const record = await r.get<InstallRecord>(installKeyOf(installKey));
   if (!record) throw new Error(`No install record for key`);
   await r.set(installKeyOf(installKey), {

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getInstall, getRedis } from "@/lib/store";
+import { getInstall } from "@/lib/store";
+import { getKv } from "@/lib/kv";
 
 /**
  * Central docs knowledge base feed.
@@ -116,7 +117,7 @@ async function readMasterKb(): Promise<KbEntry[]> {
 }
 
 async function getMasterKbCached(): Promise<KbEntry[]> {
-  const redis = getRedis();
+  const redis = getKv();
   const cached = await redis.get<KbEntry[]>(CACHE_KEY);
   if (cached && cached.length > 0) return cached;
   const entries = await readMasterKb();
