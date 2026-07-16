@@ -23,6 +23,10 @@ export type StarterCode = {
 	snippet_language: string; // Notion code-block language identifier
 	snippet: string;
 	key_endpoints: Endpoint[];
+	/** Set when no curated snippet exists for the persona's language: an
+	 *  instruction for the agent to translate the HTTP flow into that
+	 *  language when presenting it. Null for curated languages. */
+	agent_note: string | null;
 };
 
 const COMMON_ENDPOINTS: Record<Goal, Endpoint[]> = {
@@ -98,7 +102,7 @@ curl -X POST 'https://api.notion.com/v1/pages' \\
   }'
 # The response includes "url" — paste it back to DevQuest!`;
 
-const BY_LANGUAGE: Record<Language, Pick<StarterCode, "sdk_install" | "snippet_language" | "snippet">> = {
+const BY_LANGUAGE: Record<string, Pick<StarterCode, "sdk_install" | "snippet_language" | "snippet">> = {
 	typescript: {
 		sdk_install: "npm install @notionhq/client",
 		snippet_language: "typescript",
@@ -116,10 +120,25 @@ const BY_LANGUAGE: Record<Language, Pick<StarterCode, "sdk_install" | "snippet_l
 	},
 };
 
-/** Starter code for a persona. Returns null when language is unknown. */
+/** Starter code for a persona. Returns null when no language is set.
+ *  Curated languages get their hand-written snippet; anything else gets the
+ *  canonical HTTP flow plus an agent_note asking the agent to translate it
+ *  into the developer's language (tools for state, AI for reasoning). */
 export function starterCodeFor(persona: Persona): StarterCode | null {
 	if (!persona.language) return null;
-	const base = BY_LANGUAGE[persona.language];
-	const endpoints = COMMON_ENDPOINTS[persona.goal ?? "exploring"];
-	return { ...base, key_endpoints: endpoints };
+	const endpoints = COMMON_ENDPOINTS[persona.goal ?? "exploring"] ?? COMMON_ENDPOINTS.exploring;
+	const base = BY_LANGUAGE[persona.language.toLowerCase()];
+	if (base) return { ...base, key_endpoints: endpoints, agent_note: null };
+
+	return {
+		sdk_install: `# No official Notion SDK for ${persona.language} — any HTTP client works`,
+		snippet_language: "shell",
+		snippet: CURL_SNIPPET,
+		key_endpoints: endpoints,
+		agent_note:
+			`No curated ${persona.language} snippet exists. When presenting this to the developer, ` +
+			`translate the HTTP flow above into idiomatic ${persona.language} using its standard ` +
+			`HTTP client, keeping the token and parent page ID as environment variables and the ` +
+			`page title "My first Notion API page" so verify_first_call still works.`,
+	};
 }

@@ -39,7 +39,6 @@ import {
 	API_COMFORTS,
 	EXPERIENCES,
 	GOALS,
-	LANGUAGES,
 	PERSONA_PROPS,
 	PERSONAS_DB_PROPERTIES,
 	PERSONAS_DB_TITLE,
@@ -457,8 +456,12 @@ worker.tool("update_persona", {
 			.describe("What the developer wants to build.")
 			.nullable(),
 		language: j
-			.enum(...LANGUAGES)
-			.describe("The developer's primary language.")
+			.string()
+			.describe(
+				"The developer's primary language, lowercase (e.g. 'typescript', 'python', 'go', " +
+				"'rust'). Any language is accepted — curated ones get hand-written starter code, " +
+				"others get an HTTP flow to translate.",
+			)
 			.nullable(),
 		experience: j
 			.enum(...EXPERIENCES)
@@ -487,7 +490,8 @@ worker.tool("update_persona", {
 	execute: async (input, { notion }: { notion: NotionClient }) => {
 		const update: Partial<Persona> = {
 			goal: input.goal,
-			language: input.language,
+			// Normalize so "Go" and "go" share one select option in the DB
+			language: input.language ? input.language.trim().toLowerCase() : input.language,
 			experience: input.experience,
 			api_comfort: input.api_comfort,
 		};
@@ -740,6 +744,13 @@ worker.tool("get_starter_code", {
 				description: j.string(),
 			}),
 		),
+		agent_note: j
+			.string()
+			.nullable()
+			.describe(
+				"Non-null when the snippet is a generic HTTP flow: follow this instruction to " +
+				"translate it into the developer's language before presenting it.",
+			),
 	}),
 	hints: { readOnlyHint: true },
 	execute: async ({ persona_id }, { notion }: { notion: NotionClient }) => {

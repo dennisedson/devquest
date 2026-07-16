@@ -15,6 +15,9 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 
 const REPO_URL = "https://github.com/dennisedson/devquest.git";
+// TODO: drop the branch pin (here and on the success page) once
+// oauth-installer merges to main.
+const REPO_BRANCH = "oauth-installer";
 const CLONE_DIR = "devquest";
 
 const [installKey, installerUrl] = process.argv.slice(2);
@@ -77,7 +80,7 @@ const targetDir = path.resolve(CLONE_DIR);
 if (existsSync(targetDir)) {
   console.log(`\n▸ Using existing ./${CLONE_DIR} directory (delete it for a fresh clone)`);
 } else {
-  run("Cloning DevQuest", "git", ["clone", REPO_URL, CLONE_DIR]);
+  run("Cloning DevQuest", "git", ["clone", "-b", REPO_BRANCH, REPO_URL, CLONE_DIR]);
 }
 const cwd = { cwd: targetDir };
 

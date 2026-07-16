@@ -37,10 +37,10 @@ export default async function InstallPage() {
   const { workspace, installKey, parentUrl, configUrl, personasDbUrl, docSourcesUrl, teamUrls } = data;
   const appUrl = process.env.APP_URL ?? "";
 
-  const setupCommand = `npx --yes github:dennisedson/devquest ${installKey} ${appUrl}`;
+  const setupCommand = `npx --yes github:dennisedson/devquest#oauth-installer ${installKey} ${appUrl}`;
 
   const manualCommands = `# What the command above runs, step by step:
-git clone https://github.com/dennisedson/devquest && cd devquest
+git clone -b oauth-installer https://github.com/dennisedson/devquest && cd devquest
 npm install
 ntn login   # pick the SAME workspace you just installed into
 npm run check && ntn workers deploy

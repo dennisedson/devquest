@@ -8,12 +8,16 @@
  */
 
 export const GOALS = ["internal-tool", "public-integration", "automation", "ai-agent", "exploring"] as const;
+/** Curated languages — these get hand-written starter snippets and seed the
+ *  personas DB select options. Any other language is accepted (v9): Notion
+ *  auto-creates the select option, and starter code falls back to the HTTP
+ *  flow with an agent_note asking the agent to translate it. */
 export const LANGUAGES = ["typescript", "python", "curl"] as const;
 export const EXPERIENCES = ["beginner", "intermediate", "advanced"] as const;
 export const API_COMFORTS = ["none", "some", "fluent"] as const;
 
 export type Goal = (typeof GOALS)[number];
-export type Language = (typeof LANGUAGES)[number];
+export type Language = string;
 export type Experience = (typeof EXPERIENCES)[number];
 export type ApiComfort = (typeof API_COMFORTS)[number];
 
@@ -102,7 +106,8 @@ export function personaFromPage(page: { properties?: unknown }): Persona {
 	const props = (page.properties ?? {}) as PageProperties;
 	return {
 		goal: selectValue(props, PERSONA_PROPS.goal, GOALS),
-		language: selectValue(props, PERSONA_PROPS.language, LANGUAGES),
+		// Free-form (v9) — accept whatever language the select holds
+		language: props[PERSONA_PROPS.language]?.select?.name ?? null,
 		experience: selectValue(props, PERSONA_PROPS.experience, EXPERIENCES),
 		api_comfort: selectValue(props, PERSONA_PROPS.api_comfort, API_COMFORTS),
 	};
