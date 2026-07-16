@@ -638,7 +638,8 @@ worker.tool("query_docs", {
 	description:
 		"Return the documentation pages most relevant to a developer persona, ranked. Use this to " +
 		"ground recommendations in real docs once you know 2+ persona fields. Optionally narrow to " +
-		"one category.",
+		"one category. When curating a guide reading path, request max_results 30 and select the " +
+		"best 10-15 yourself using conversation context the ranking cannot see.",
 	schema: j.object({
 		persona_id: j.string().describe("The persona to match docs against."),
 		category: j
@@ -689,6 +690,30 @@ worker.tool("query_docs", {
 // ---------------------------------------------------------------------------
 // Guide ingredients — pure helpers used by the guide-page tools
 // ---------------------------------------------------------------------------
+
+/** Minimum docs for an agent-curated reading path to be accepted; below this
+ *  we fall back to deterministic ranking so a guide never ships thin. */
+const MIN_CURATED_DOCS = 3;
+const MAX_CURATED_DOCS = 20;
+
+/**
+ * Resolve an agent-curated list of doc URLs against the KB, preserving the
+ * agent's order. Returns null when too few resolve — callers fall back to
+ * rankDocs, so AI curates but never below the deterministic baseline.
+ */
+function resolveCuratedPath(allDocs: KbDoc[], urls: string[]): KbDoc[] | null {
+	const byUrl = new Map(allDocs.map((d) => [d.url, d]));
+	const seen = new Set<string>();
+	const resolved: KbDoc[] = [];
+	for (const url of urls) {
+		const doc = byUrl.get(url.trim());
+		if (!doc || seen.has(doc.url)) continue;
+		seen.add(doc.url);
+		resolved.push(doc);
+		if (resolved.length >= MAX_CURATED_DOCS) break;
+	}
+	return resolved.length >= MIN_CURATED_DOCS ? resolved : null;
+}
 
 /** Group ranked docs by category for the guide payload. */
 function groupByCategory(docs: KbDoc[]): Array<{ category: string; docs: Array<{ title: string; url: string; summary: string }> }> {
@@ -1277,9 +1302,19 @@ worker.tool("create_guide_page", {
 	description:
 		"Create a persistent Notion page with the developer's personalized guide: persona callout, " +
 		"reading path as checkable to-dos, a suggested first project, and a session log. " +
-		"Call this once all four persona fields are set. Returns the page URL.",
+		"Call this once all four persona fields are set. Curate the reading path yourself: pick " +
+		"10-15 doc URLs from query_docs results using everything you know from conversation, " +
+		"ordered for their level, and pass them as reading_path. Returns the page URL.",
 	schema: j.object({
 		persona_id: j.string().describe("The persona to generate a guide page for."),
+		reading_path: j
+			.array(j.string())
+			.describe(
+				"Doc URLs you curated for this developer, in reading order — from query_docs " +
+				"results only. Omit to use deterministic ranking; fewer than 3 valid URLs also " +
+				"falls back to ranking.",
+			)
+			.nullable(),
 		parent_page: j
 			.string()
 			.describe("Notion page URL or ID to create the guide under. Uses the persona page's parent if omitted.")
@@ -1294,8 +1329,11 @@ worker.tool("create_guide_page", {
 		guide_page_url: j.string(),
 		persona_id: j.string(),
 		reading_path_count: j.number(),
+		curated: j
+			.boolean()
+			.describe("True when your reading_path was used; false means deterministic ranking."),
 	}),
-	execute: async ({ persona_id, parent_page, session_note }, { notion }: { notion: NotionClient }) => {
+	execute: async ({ persona_id, reading_path, parent_page, session_note }, { notion }: { notion: NotionClient }) => {
 		// 1. Look up the persona
 		const personaPage = await findPersonaPage(notion, persona_id);
 		if (!personaPage) throw new Error(`No persona found with ID ${persona_id}.`);
@@ -1315,9 +1353,11 @@ worker.tool("create_guide_page", {
 			);
 		}
 
-		// 3. Rank docs and build blocks
+		// 3. Reading path: agent-curated when provided and valid, deterministic
+		//    ranking as the floor and fallback
 		const allDocs = await fetchAllKbDocs(notion);
-		const ranked = rankDocs(allDocs, persona, { maxResults: 15 });
+		const curatedPath = reading_path?.length ? resolveCuratedPath(allDocs, reading_path) : null;
+		const ranked = curatedPath ?? rankDocs(allDocs, persona, { maxResults: 15 });
 		const project = suggestProject(persona);
 		const note = session_note ?? `Created persona. Goal: ${persona.goal}, Language: ${persona.language}.`;
 		const blocks = buildGuideBlocks(persona, ranked, project, note);
@@ -1370,6 +1410,7 @@ worker.tool("create_guide_page", {
 			guide_page_url: guidePage.url ?? `https://notion.so/${guidePage.id.replace(/-/g, "")}`,
 			persona_id,
 			reading_path_count: ranked.length,
+			curated: curatedPath !== null,
 		};
 	},
 });
@@ -1503,7 +1544,15 @@ worker.tool("update_guide_page", {
 			.nullable(),
 		refresh_reading_path: j
 			.boolean()
-			.describe("If true, re-rank docs against the (possibly updated) persona and replace unchecked to-do items.")
+			.describe("If true, replace unchecked to-do items with fresh recommendations (your curated reading_path, or re-ranked docs).")
+			.nullable(),
+		reading_path: j
+			.array(j.string())
+			.describe(
+				"With refresh_reading_path=true: doc URLs you curated for the refreshed path, in " +
+				"reading order — from query_docs results only. Omit (or pass fewer than 3 valid " +
+				"URLs) to use deterministic ranking.",
+			)
 			.nullable(),
 	}),
 	outputSchema: j.object({
@@ -1511,6 +1560,10 @@ worker.tool("update_guide_page", {
 		session_log_added: j.boolean(),
 		reading_path_refreshed: j.boolean(),
 		new_reading_path_count: j.number().nullable(),
+		curated: j
+			.boolean()
+			.nullable()
+			.describe("On refresh: true when your reading_path was used, false when deterministic ranking was. Null without a refresh."),
 		level_up: j.object({
 			leveled_up: j.boolean(),
 			field: j.string().nullable(),
@@ -1518,7 +1571,7 @@ worker.tool("update_guide_page", {
 			new_value: j.string().nullable(),
 		}).nullable(),
 	}),
-	execute: async ({ persona_id, session_note, refresh_reading_path }, { notion }: { notion: NotionClient }) => {
+	execute: async ({ persona_id, session_note, refresh_reading_path, reading_path }, { notion }: { notion: NotionClient }) => {
 		const personaPage = await findPersonaPage(notion, persona_id);
 		if (!personaPage) throw new Error(`No persona found with ID ${persona_id}.`);
 		const persona = personaFromPage(personaPage);
@@ -1534,6 +1587,7 @@ worker.tool("update_guide_page", {
 
 		let readingPathRefreshed = false;
 		let newCount: number | null = null;
+		let curated: boolean | null = null;
 
 		// Refresh reading path: delete unchecked to-dos, add fresh ones
 		if (refresh_reading_path) {
@@ -1560,10 +1614,12 @@ worker.tool("update_guide_page", {
 				}
 			}
 
-			// Find the last heading_3 in the reading path section to append after
-			// Actually, find the "Your Reading Path" heading and append new to-dos after it
+			// Fresh path: agent-curated when provided and valid, deterministic
+			// ranking as the floor and fallback
 			const allDocs = await fetchAllKbDocs(notion);
-			const ranked = rankDocs(allDocs, persona, { maxResults: 15 });
+			const curatedPath = reading_path?.length ? resolveCuratedPath(allDocs, reading_path) : null;
+			const ranked = curatedPath ?? rankDocs(allDocs, persona, { maxResults: 15 });
+			curated = curatedPath !== null;
 			const grouped = groupByCategory(ranked);
 
 			// Build new reading path blocks
@@ -1665,6 +1721,7 @@ worker.tool("update_guide_page", {
 			session_log_added: sessionLogAdded,
 			reading_path_refreshed: readingPathRefreshed,
 			new_reading_path_count: newCount,
+			curated,
 			level_up: levelUp,
 		};
 	},
