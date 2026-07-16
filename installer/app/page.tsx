@@ -5,6 +5,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   token_exchange_failed: "Could not complete authorization with Notion. Please try again.",
   storage_failed: "Connected to Notion, but saving the connection failed. Please try again.",
   setup_failed: "Connected to Notion, but creating the workspace pages failed. Please try again.",
+  setup_session_expired: "Your setup session expired. Connect to Notion again to continue.",
 };
 
 export default async function Home({
@@ -61,8 +62,8 @@ export default async function Home({
         </a>
 
         <p style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "#888", textAlign: "center" }}>
-          You&apos;ll be asked to select which Notion workspace to install into.
-          <br />One manual step remains after: creating the Custom Agent.
+          You&apos;ll pick a Notion workspace, then answer a few quick
+          (skippable) questions about your team&apos;s stack.
         </p>
       </div>
     </main>

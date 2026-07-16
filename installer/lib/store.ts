@@ -13,7 +13,7 @@ export interface InstallRecord {
 
 let redis: Redis | null = null;
 
-function getRedis(): Redis {
+export function getRedis(): Redis {
   if (!redis) {
     // Vercel's Upstash marketplace integration injects UPSTASH_*; older
     // Vercel KV setups inject KV_REST_API_* — accept either.

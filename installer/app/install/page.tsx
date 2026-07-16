@@ -6,6 +6,7 @@ interface SetupPayload {
   parentUrl: string;
   configUrl: string;
   personasDbUrl: string;
+  docSourcesUrl?: string;
   teamUrls: { name: string; url: string }[];
 }
 
@@ -33,7 +34,7 @@ export default async function InstallPage() {
     );
   }
 
-  const { workspace, installKey, parentUrl, configUrl, personasDbUrl, teamUrls } = data;
+  const { workspace, installKey, parentUrl, configUrl, personasDbUrl, docSourcesUrl, teamUrls } = data;
   const appUrl = process.env.APP_URL ?? "";
 
   const setupCommand = `npx --yes github:dennisedson/devquest ${installKey} ${appUrl}`;
@@ -75,6 +76,9 @@ ntn workers sync trigger docs_index`;
               pages
             </li>
             <li><a href={personasDbUrl} target="_blank" rel="noopener">DevQuest Personas</a> database</li>
+            {docSourcesUrl && (
+              <li><a href={docSourcesUrl} target="_blank" rel="noopener">DevQuest Doc Sources</a> — the docs in your knowledge base</li>
+            )}
           </ul>
         </div>
 

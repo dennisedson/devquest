@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "crypto";
-import { runSetup } from "@/lib/setup";
 import { saveAuthorization } from "@/lib/store";
 
 // Setup makes ~6 sequential Notion API calls; don't let the default 10s limit cut it off.
@@ -99,34 +98,19 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/?error=storage_failed`);
   }
 
-  // Run workspace setup
-  let result;
-  try {
-    result = await runSetup(tokenData.access_token, workspaceName);
-  } catch (err) {
-    console.error("Setup failed:", err);
-    return NextResponse.redirect(`${appUrl}/?error=setup_failed`);
-  }
-
-  // Hand the result to the success page via a short-lived cookie so the
-  // install key never appears in a URL.
-  const payload = Buffer.from(
-    JSON.stringify({
-      workspace: workspaceName,
-      installKey,
-      parentUrl: result.parentUrl,
-      configUrl: result.configUrl,
-      personasDbUrl: result.personasDbUrl,
-      teamUrls: result.teamUrls,
-    })
+  // Workspace page creation happens on /setup (after the questionnaire).
+  // Hand the install identity over via a short-lived cookie so the key never
+  // appears in a URL.
+  const pending = Buffer.from(
+    JSON.stringify({ installKey, workspace: workspaceName })
   ).toString("base64url");
 
-  jar.set("devquest_setup", payload, {
+  jar.set("devquest_pending", pending, {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",
     sameSite: "lax",
-    maxAge: 600,
+    maxAge: 1800,
     path: "/",
   });
-  return NextResponse.redirect(`${appUrl}/install`);
+  return NextResponse.redirect(`${appUrl}/setup`);
 }

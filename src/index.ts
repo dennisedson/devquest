@@ -126,6 +126,48 @@ interface SyncState {
 	seen?: Record<string, string>;
 }
 
+/** A doc-source config row read from the "DevQuest Doc Sources" database. */
+interface DocSourceRow {
+	name: string;
+	url: string;
+	type: SourceType;
+}
+
+/** Central KB feed response (served by the DevQuest installer's /api/kb). */
+interface CentralKbResponse {
+	entries: Array<DocEntry & { source: string }>;
+	served: string[];
+}
+
+/**
+ * Fetch pre-classified entries from the central DevQuest knowledge base.
+ *
+ * Only applies to installs running behind the DevQuest proxy (their
+ * NOTION_API_TOKEN is a dvq_ install key) — the master workspace, which
+ * *produces* the central KB, uses a direct token and skips this. Returns
+ * null on any failure so the sync falls back to fetching sources directly.
+ */
+async function fetchCentralKb(sourceNames: string[]): Promise<CentralKbResponse | null> {
+	const key = process.env.NOTION_API_TOKEN ?? "";
+	const base = process.env.NOTION_API_BASE_URL ?? "";
+	if (!key.startsWith("dvq_")) return null;
+	try {
+		const origin = new URL(base).origin;
+		const sources = ["notion", ...sourceNames.map((n) => n.toLowerCase())];
+		const res = await fetch(
+			`${origin}/api/kb?sources=${encodeURIComponent(sources.join(","))}`,
+			{ headers: { Authorization: `Bearer ${key}` } },
+		);
+		if (!res.ok) return null;
+		const data = (await res.json()) as CentralKbResponse;
+		if (!Array.isArray(data.entries) || data.entries.length === 0) return null;
+		if (!Array.isArray(data.served)) return null;
+		return data;
+	} catch {
+		return null;
+	}
+}
+
 worker.sync("docs_index", {
 	database: docsKb,
 	mode: "replace",
@@ -133,18 +175,8 @@ worker.sync("docs_index", {
 	execute: async (state, { notion }: { notion: NotionClient }) => {
 		const offset = (state as SyncState | undefined)?.offset ?? 0;
 
-		// ---- Notion docs (always included) ----
-		const response = await fetch(LLMS_TXT_URL);
-		if (!response.ok) {
-			throw new Error(`Failed to fetch ${LLMS_TXT_URL}: ${response.status} ${response.statusText}`);
-		}
-		const notionEntries = parseLlmsTxt(await response.text());
-		if (notionEntries.length === 0) {
-			throw new Error("Parsed 0 entries from llms.txt — format may have changed; aborting to avoid wiping the knowledge base.");
-		}
-
-		// ---- Custom doc sources (v4) ----
-		const customEntries: Array<DocEntry & { source: string }> = [];
+		// ---- Discover this workspace's doc-source configs (v4) ----
+		const sourceRows: DocSourceRow[] = [];
 		try {
 			const dsResponse = await notion.search({
 				query: DOC_SOURCES_DB_TITLE,
@@ -177,17 +209,7 @@ worker.sync("docs_index", {
 						?? detectSourceType(sourceUrl);
 
 					if (!sourceName || !sourceUrl) continue;
-
-					try {
-						const srcResp = await fetch(sourceUrl);
-						if (!srcResp.ok) continue;
-						const parsed = parseDocSource(await srcResp.text(), sourceType, sourceUrl);
-						for (const entry of parsed) {
-							customEntries.push({ ...entry, source: sourceName });
-						}
-					} catch {
-						// Skip sources that fail to fetch — don't break the whole sync
-					}
+					sourceRows.push({ name: sourceName, url: sourceUrl, type: sourceType });
 				}
 				break;
 			}
@@ -195,12 +217,54 @@ worker.sync("docs_index", {
 			// Doc Sources database doesn't exist yet — that's fine, just sync Notion docs
 		}
 
-		// ---- Combine and paginate ----
 		type TaggedEntry = DocEntry & { source: string };
-		const allEntries: TaggedEntry[] = [
-			...notionEntries.map((e) => ({ ...e, source: "Notion" })),
-			...customEntries,
-		];
+
+		/** Fetch and parse one doc source directly (per-workspace path). */
+		async function fetchSourceDirectly(row: DocSourceRow): Promise<TaggedEntry[]> {
+			try {
+				const srcResp = await fetch(row.url);
+				if (!srcResp.ok) return [];
+				return parseDocSource(await srcResp.text(), row.type, row.url).map((entry) => ({
+					...entry,
+					source: row.name,
+				}));
+			} catch {
+				// Skip sources that fail to fetch — don't break the whole sync
+				return [];
+			}
+		}
+
+		// ---- Entries: central KB feed first, direct fetching as fallback ----
+		const allEntries: TaggedEntry[] = [];
+		const central = await fetchCentralKb(sourceRows.map((r) => r.name));
+
+		if (central) {
+			// Pre-classified, curated entries for every source the central KB
+			// carries; anything it doesn't serve (custom/private sources) is
+			// still fetched directly.
+			allEntries.push(...central.entries);
+			const servedNames = new Set(central.served);
+			for (const row of sourceRows) {
+				if (servedNames.has(row.name.toLowerCase())) continue;
+				allEntries.push(...(await fetchSourceDirectly(row)));
+			}
+		} else {
+			// ---- Notion docs, fetched directly (always included) ----
+			const response = await fetch(LLMS_TXT_URL);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch ${LLMS_TXT_URL}: ${response.status} ${response.statusText}`);
+			}
+			const notionEntries = parseLlmsTxt(await response.text());
+			if (notionEntries.length === 0) {
+				throw new Error("Parsed 0 entries from llms.txt — format may have changed; aborting to avoid wiping the knowledge base.");
+			}
+			allEntries.push(...notionEntries.map((e) => ({ ...e, source: "Notion" })));
+			for (const row of sourceRows) {
+				allEntries.push(...(await fetchSourceDirectly(row)));
+			}
+		}
+
+		// ---- Combine and paginate ----
 
 		// v8: track when each doc first appeared. `seen` persists across sync
 		// cycles, so First Seen stays stable instead of resetting every day.
