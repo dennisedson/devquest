@@ -8,13 +8,32 @@ import { KNOWN_DOC_SOURCES } from "@/lib/doc-sources";
 // sequential Notion calls — don't let the default 10s limit cut it off.
 export const maxDuration = 60;
 
-const VALID_LANGUAGES = new Set(["typescript", "python", "curl"]);
-
 interface SetupRequestBody {
   skipped?: boolean;
   tools?: string[];
+  customTools?: { name?: string; url?: string }[];
   teams?: string[];
   languages?: string[];
+}
+
+function sanitizeCustomTools(
+  input: SetupRequestBody["customTools"]
+): { name: string; url: string }[] {
+  const out: { name: string; url: string }[] = [];
+  for (const item of input ?? []) {
+    const name = String(item?.name ?? "").trim().slice(0, 40);
+    const rawUrl = String(item?.url ?? "").trim();
+    if (!name || !rawUrl) continue;
+    try {
+      const url = new URL(rawUrl);
+      if (url.protocol !== "https:" && url.protocol !== "http:") continue;
+      out.push({ name, url: url.toString() });
+    } catch {
+      // not a valid URL — drop it
+    }
+    if (out.length >= 10) break;
+  }
+  return out;
 }
 
 export async function POST(req: NextRequest) {
@@ -48,17 +67,26 @@ export async function POST(req: NextRequest) {
     body = { skipped: true };
   }
 
-  // Sanitize answers — unknown tools/languages are dropped, teams capped.
+  // Sanitize answers — unknown tools dropped, custom URLs validated, caps applied.
   let answers: SetupAnswers | undefined;
   if (!body.skipped) {
     answers = {
       tools: (body.tools ?? []).filter((t) => t in KNOWN_DOC_SOURCES),
+      customTools: sanitizeCustomTools(body.customTools),
       teams: (body.teams ?? [])
         .map((t) => String(t).trim())
         .filter(Boolean)
         .slice(0, 10),
-      languages: (body.languages ?? []).filter((l) => VALID_LANGUAGES.has(l)),
+      languages: (body.languages ?? [])
+        .map((l) => String(l).trim().slice(0, 30))
+        .filter(Boolean)
+        .slice(0, 10),
     };
+    // Demand signal: custom sources several installs ask for are candidates
+    // for promotion to the central master KB.
+    for (const t of answers.customTools) {
+      console.log(`custom-doc-source requested: ${t.name} (${t.url}) by ${pending.installKey.slice(0, 12)}…`);
+    }
   }
 
   let result;

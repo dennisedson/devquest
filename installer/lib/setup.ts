@@ -1,5 +1,10 @@
 import { notionFetch, paragraph, labeledParagraph, richText } from "./notion";
-import { KNOWN_DOC_SOURCES, SOURCE_TYPES, DOC_SOURCES_DB_TITLE } from "./doc-sources";
+import {
+  KNOWN_DOC_SOURCES,
+  SOURCE_TYPES,
+  DOC_SOURCES_DB_TITLE,
+  detectSourceType,
+} from "./doc-sources";
 
 export interface SetupResult {
   parentUrl: string;
@@ -15,9 +20,12 @@ export interface SetupResult {
 export interface SetupAnswers {
   /** Keys of KNOWN_DOC_SOURCES the company uses (e.g. ["stripe", "hubspot"]). */
   tools: string[];
+  /** Tools we don't know: name + docs URL. Registered in the workspace's own
+   *  Doc Sources DB, fetched directly by their worker's sync. */
+  customTools: { name: string; url: string }[];
   /** Department/team names (e.g. ["Platform", "Payments"]). */
   teams: string[];
-  /** Primary languages (e.g. ["typescript", "python"]). */
+  /** Languages, free-form (e.g. ["TypeScript", "Go", "Rust"]). */
   languages: string[];
 }
 
@@ -33,9 +41,12 @@ export async function runSetup(
   workspaceName: string,
   answers?: SetupAnswers
 ): Promise<SetupResult> {
-  const toolLabels = (answers?.tools ?? [])
-    .map((key) => KNOWN_DOC_SOURCES[key]?.label)
-    .filter((l): l is string => Boolean(l));
+  const toolLabels = [
+    ...(answers?.tools ?? [])
+      .map((key) => KNOWN_DOC_SOURCES[key]?.label)
+      .filter((l): l is string => Boolean(l)),
+    ...(answers?.customTools ?? []).map((t) => t.name),
+  ];
   const teams = answers?.teams?.length ? answers.teams : DEFAULT_TEAMS;
   const languagesLine = answers?.languages?.length
     ? answers.languages.join(", ")
@@ -163,16 +174,26 @@ export async function runSetup(
     }
   );
 
-  // Rows for the tools chosen in the questionnaire
-  for (const key of answers?.tools ?? []) {
-    const source = KNOWN_DOC_SOURCES[key];
-    if (!source) continue;
+  // Rows for the tools chosen in the questionnaire — known sources plus any
+  // custom name+URL entries (their worker fetches those directly).
+  const sourceRows = [
+    ...(answers?.tools ?? [])
+      .map((key) => KNOWN_DOC_SOURCES[key])
+      .filter(Boolean)
+      .map((s) => ({ name: s.label, url: s.url, type: s.type })),
+    ...(answers?.customTools ?? []).map((t) => ({
+      name: t.name,
+      url: t.url,
+      type: detectSourceType(t.url),
+    })),
+  ];
+  for (const row of sourceRows) {
     await notionFetch(token, "POST", "/pages", {
       parent: { database_id: docSourcesDb.id },
       properties: {
-        "Source Name": { title: [{ type: "text", text: { content: source.label } }] },
-        URL: { url: source.url },
-        Type: { select: { name: source.type } },
+        "Source Name": { title: [{ type: "text", text: { content: row.name } }] },
+        URL: { url: row.url },
+        Type: { select: { name: row.type } },
       },
     });
   }

@@ -30,15 +30,33 @@ const chipLabel = (selected: boolean): React.CSSProperties => ({
   userSelect: "none",
 });
 
+interface CustomTool {
+  name: string;
+  url: string;
+}
+
 export default function SetupForm() {
   const [tools, setTools] = useState<string[]>([]);
+  const [customTools, setCustomTools] = useState<CustomTool[]>([]);
+  const [customName, setCustomName] = useState("");
+  const [customUrl, setCustomUrl] = useState("");
   const [languages, setLanguages] = useState<string[]>([]);
+  const [otherLanguages, setOtherLanguages] = useState("");
   const [teamsText, setTeamsText] = useState("");
   const [submitting, setSubmitting] = useState<"answers" | "skip" | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const toggle = (list: string[], set: (v: string[]) => void, key: string) =>
     set(list.includes(key) ? list.filter((k) => k !== key) : [...list, key]);
+
+  function addCustomTool() {
+    const name = customName.trim();
+    const url = customUrl.trim();
+    if (!name || !url || customTools.length >= 10) return;
+    setCustomTools([...customTools, { name, url }]);
+    setCustomName("");
+    setCustomUrl("");
+  }
 
   async function submit(skipped: boolean) {
     setSubmitting(skipped ? "skip" : "answers");
@@ -53,7 +71,14 @@ export default function SetupForm() {
             : {
                 skipped: false,
                 tools,
-                languages,
+                customTools,
+                languages: [
+                  ...languages,
+                  ...otherLanguages
+                    .split(",")
+                    .map((l) => l.trim())
+                    .filter(Boolean),
+                ],
                 teams: teamsText
                   .split(",")
                   .map((t) => t.trim())
@@ -93,6 +118,45 @@ export default function SetupForm() {
             {label}
           </span>
         ))}
+        {customTools.map((t, i) => (
+          <span
+            key={`custom-${i}`}
+            style={chipLabel(true)}
+            title="Click to remove"
+            onClick={() => !busy && setCustomTools(customTools.filter((_, j) => j !== i))}
+          >
+            {t.name} ✕
+          </span>
+        ))}
+        <div style={{ display: "flex", gap: "0.5rem", marginTop: "0.5rem" }}>
+          <input
+            type="text"
+            value={customName}
+            onChange={(e) => setCustomName(e.target.value)}
+            disabled={busy}
+            placeholder="Something else? Name…"
+            style={{ flex: 1, minWidth: 0, padding: "0.5rem 0.65rem", borderRadius: 8, border: "1px solid #d4d4d4", fontSize: "0.875rem" }}
+          />
+          <input
+            type="url"
+            value={customUrl}
+            onChange={(e) => setCustomUrl(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addCustomTool()}
+            disabled={busy}
+            placeholder="Docs URL (llms.txt, OpenAPI, sitemap…)"
+            style={{ flex: 2, minWidth: 0, padding: "0.5rem 0.65rem", borderRadius: 8, border: "1px solid #d4d4d4", fontSize: "0.875rem" }}
+          />
+          <button
+            onClick={addCustomTool}
+            disabled={busy || !customName.trim() || !customUrl.trim()}
+            style={{ padding: "0.5rem 0.9rem", borderRadius: 8, border: "1px solid #000", background: "#fff", fontSize: "0.875rem", cursor: "pointer" }}
+          >
+            Add
+          </button>
+        </div>
+        <p style={{ margin: "0.5rem 0 0", fontSize: "0.75rem", color: "#aaa" }}>
+          Custom docs stay private to your workspace.
+        </p>
       </div>
 
       <div style={card}>
@@ -127,12 +191,28 @@ export default function SetupForm() {
         {LANGUAGES.map(({ key, label }) => (
           <span
             key={key}
-            style={chipLabel(languages.includes(key))}
-            onClick={() => !busy && toggle(languages, setLanguages, key)}
+            style={chipLabel(languages.includes(label))}
+            onClick={() => !busy && toggle(languages, setLanguages, label)}
           >
             {label}
           </span>
         ))}
+        <input
+          type="text"
+          value={otherLanguages}
+          onChange={(e) => setOtherLanguages(e.target.value)}
+          disabled={busy}
+          placeholder="Others, comma-separated — Go, Rust, Java…"
+          style={{
+            width: "100%",
+            boxSizing: "border-box",
+            marginTop: "0.5rem",
+            padding: "0.5rem 0.65rem",
+            borderRadius: 8,
+            border: "1px solid #d4d4d4",
+            fontSize: "0.875rem",
+          }}
+        />
       </div>
 
       {error && (

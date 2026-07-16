@@ -27,3 +27,14 @@ export const KNOWN_DOC_SOURCES: Record<
 };
 
 export const DOC_SOURCES_DB_TITLE = "DevQuest Doc Sources";
+
+/** Detect a source's format from its URL. Mirrors detectSourceType in
+ *  src/docs-parser.ts (the worker) — keep the two in sync. */
+export function detectSourceType(url: string): SourceType {
+  const lower = url.toLowerCase();
+  if (lower.endsWith("llms.txt") || lower.endsWith("llms-full.txt")) return "llms-txt";
+  if (lower.endsWith(".json") || lower.endsWith(".yaml") || lower.endsWith(".yml")) return "openapi";
+  if (lower.includes("sitemap") && lower.endsWith(".xml")) return "sitemap";
+  if (lower.endsWith(".md") || lower.endsWith(".mdx")) return "markdown";
+  return "llms-txt";
+}
