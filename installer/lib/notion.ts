@@ -33,6 +33,24 @@ export function paragraph(text: string) {
   };
 }
 
+// Notion does not parse markdown in rich text — bold labels need explicit annotations.
+export function labeledParagraph(label: string, text: string) {
+  return {
+    object: "block",
+    type: "paragraph",
+    paragraph: {
+      rich_text: [
+        {
+          type: "text",
+          text: { content: `${label}: ` },
+          annotations: { bold: true },
+        },
+        { type: "text", text: { content: text } },
+      ],
+    },
+  };
+}
+
 export function richText(content: string) {
   return [{ type: "text", text: { content } }];
 }

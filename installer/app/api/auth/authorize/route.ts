@@ -12,9 +12,9 @@ export async function GET() {
   const clientId = process.env.NOTION_CLIENT_ID;
   const appUrl = process.env.APP_URL;
 
-  if (!clientId || !appUrl) {
+  if (!clientId || !appUrl || !process.env.SESSION_SECRET) {
     return NextResponse.json(
-      { error: "Missing NOTION_CLIENT_ID or APP_URL env vars" },
+      { error: "Missing NOTION_CLIENT_ID, APP_URL, or SESSION_SECRET env vars" },
       { status: 500 }
     );
   }

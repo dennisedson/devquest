@@ -1,30 +1,47 @@
-export default async function InstallPage({
-  searchParams,
-}: {
-  searchParams: Promise<{
-    workspace?: string;
-    parentUrl?: string;
-    configUrl?: string;
-    personasDbUrl?: string;
-  }>;
-}) {
-  const { workspace, parentUrl, configUrl, personasDbUrl } = await searchParams;
+import { cookies } from "next/headers";
 
-  if (!parentUrl) {
+interface SetupPayload {
+  workspace: string;
+  token: string;
+  parentUrl: string;
+  configUrl: string;
+  personasDbUrl: string;
+  teamUrls: { name: string; url: string }[];
+}
+
+function readPayload(raw: string | undefined): SetupPayload | null {
+  if (!raw) return null;
+  try {
+    return JSON.parse(Buffer.from(raw, "base64url").toString()) as SetupPayload;
+  } catch {
+    return null;
+  }
+}
+
+export default async function InstallPage() {
+  const jar = await cookies();
+  const data = readPayload(jar.get("devquest_setup")?.value);
+
+  if (!data) {
     return (
       <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <p>Something went wrong. <a href="/">Try again</a></p>
+        <p>
+          This page has expired — the setup details (including your token) are
+          only shown once. <a href="/">Run the install again</a>
+        </p>
       </main>
     );
   }
 
+  const { workspace, token, parentUrl, configUrl, personasDbUrl, teamUrls } = data;
+
   const deployCommands = `# 1. Clone and deploy the worker
-git clone https://github.com/YOUR_ORG/devquest && cd devquest
+git clone https://github.com/dennisedson/devquest && cd devquest
 ntn login
 npm install && npm run check && ntn workers deploy
 
-# 2. Set the integration token (copy from Notion → Settings → My connections → DevQuest)
-ntn workers env set NOTION_API_TOKEN=ntn_...
+# 2. Set the integration token (your DevQuest access token, shown below only once)
+ntn workers env set NOTION_API_TOKEN=${token}
 ntn workers env set NOTION_API_BASE_URL=https://api.notion.com
 
 # 3. Trigger the knowledge base sync
@@ -48,7 +65,15 @@ ntn workers sync trigger docs_index`;
           <ul style={{ margin: 0, padding: "0 0 0 1.25rem", lineHeight: 2 }}>
             <li><a href={parentUrl} target="_blank" rel="noopener">DevQuest</a> — parent page</li>
             <li><a href={configUrl} target="_blank" rel="noopener">DevQuest Company Config</a> — edit with your stack</li>
-            <li>Platform Team, Frontend Team, Data Engineering pages</li>
+            <li>
+              {teamUrls.map((t, i) => (
+                <span key={t.name}>
+                  {i > 0 && ", "}
+                  <a href={t.url} target="_blank" rel="noopener">{t.name}</a>
+                </span>
+              ))}{" "}
+              pages
+            </li>
             <li><a href={personasDbUrl} target="_blank" rel="noopener">DevQuest Personas</a> database</li>
           </ul>
         </div>
@@ -57,6 +82,11 @@ ntn workers sync trigger docs_index`;
           <p style={{ margin: "0 0 0.875rem", fontWeight: 600 }}>Two remaining steps:</p>
 
           <p style={{ margin: "0 0 0.5rem", fontWeight: 500 }}>1. Deploy the worker (terminal)</p>
+          <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "#b45309" }}>
+            The <code>NOTION_API_TOKEN</code> below is your access token — it is
+            shown only on this page, so run (or save) these commands now. Treat
+            it like a password.
+          </p>
           <pre style={{
             background: "#f4f4f4",
             borderRadius: 6,
@@ -65,6 +95,7 @@ ntn workers sync trigger docs_index`;
             overflowX: "auto",
             margin: "0 0 1.25rem",
             whiteSpace: "pre-wrap",
+            wordBreak: "break-all",
           }}>
             {deployCommands}
           </pre>

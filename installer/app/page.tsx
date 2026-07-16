@@ -1,20 +1,20 @@
-import { redirect } from "next/navigation";
+const ERROR_MESSAGES: Record<string, string> = {
+  access_denied: "You cancelled the Notion authorization. No changes were made.",
+  missing_params: "Notion did not return the expected parameters. Please try again.",
+  invalid_state: "The sign-in session expired or was invalid. Please try again.",
+  token_exchange_failed: "Could not complete authorization with Notion. Please try again.",
+  setup_failed: "Connected to Notion, but creating the workspace pages failed. Please try again.",
+};
 
-// Kick off OAuth immediately — no landing page friction for now
-export default function Home({
+export default async function Home({
   searchParams,
 }: {
   searchParams: Promise<{ error?: string }>;
 }) {
-  return <LandingPage searchParamsPromise={searchParams} />;
-}
-
-async function LandingPage({
-  searchParamsPromise,
-}: {
-  searchParamsPromise: Promise<{ error?: string }>;
-}) {
-  const { error } = await searchParamsPromise;
+  const { error } = await searchParams;
+  const errorMessage = error
+    ? ERROR_MESSAGES[error] ?? "Something went wrong. Please try again."
+    : null;
 
   return (
     <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: "2rem" }}>
@@ -36,9 +36,9 @@ async function LandingPage({
           </ul>
         </div>
 
-        {error && (
+        {errorMessage && (
           <div style={{ background: "#fff3f3", border: "1px solid #fca5a5", borderRadius: 8, padding: "0.75rem 1rem", marginBottom: "1rem", color: "#b91c1c", fontSize: "0.875rem" }}>
-            Error: {decodeURIComponent(error)}
+            {errorMessage}
           </div>
         )}
 
@@ -60,7 +60,7 @@ async function LandingPage({
         </a>
 
         <p style={{ marginTop: "1rem", fontSize: "0.8125rem", color: "#888", textAlign: "center" }}>
-          You'll be asked to select which Notion workspace to install into.
+          You&apos;ll be asked to select which Notion workspace to install into.
           <br />One manual step remains after: creating the Custom Agent.
         </p>
       </div>

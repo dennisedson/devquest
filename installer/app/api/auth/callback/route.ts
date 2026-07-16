@@ -1,18 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
-import { createHmac } from "crypto";
+import { createHmac, timingSafeEqual } from "crypto";
 import { runSetup } from "@/lib/setup";
+
+// Setup makes ~6 sequential Notion API calls; don't let the default 10s limit cut it off.
+export const maxDuration = 60;
 
 function verifyState(cookieValue: string, state: string): boolean {
   const [storedState, sig] = cookieValue.split(".");
-  if (storedState !== state) return false;
+  if (!storedState || !sig || storedState !== state) return false;
   const expected = createHmac("sha256", process.env.SESSION_SECRET!)
     .update(state)
     .digest("hex");
-  return sig === expected;
+  const sigBuf = Buffer.from(sig);
+  const expectedBuf = Buffer.from(expected);
+  return sigBuf.length === expectedBuf.length && timingSafeEqual(sigBuf, expectedBuf);
 }
 
 export async function GET(req: NextRequest) {
+  const { NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, SESSION_SECRET, APP_URL } =
+    process.env;
+  if (!NOTION_CLIENT_ID || !NOTION_CLIENT_SECRET || !SESSION_SECRET || !APP_URL) {
+    return NextResponse.json(
+      { error: "Missing NOTION_CLIENT_ID, NOTION_CLIENT_SECRET, SESSION_SECRET, or APP_URL env vars" },
+      { status: 500 }
+    );
+  }
+  const appUrl = APP_URL;
+
   const { searchParams } = req.nextUrl;
   const code = searchParams.get("code");
   const state = searchParams.get("state");
@@ -20,29 +35,28 @@ export async function GET(req: NextRequest) {
 
   if (error) {
     return NextResponse.redirect(
-      `${process.env.APP_URL}/?error=${encodeURIComponent(error)}`
+      `${appUrl}/?error=${encodeURIComponent(error)}`
     );
   }
 
   if (!code || !state) {
-    return NextResponse.redirect(`${process.env.APP_URL}/?error=missing_params`);
+    return NextResponse.redirect(`${appUrl}/?error=missing_params`);
   }
 
   const jar = await cookies();
   const stateCookie = jar.get("oauth_state")?.value;
   if (!stateCookie || !verifyState(stateCookie, state)) {
-    return NextResponse.redirect(`${process.env.APP_URL}/?error=invalid_state`);
+    return NextResponse.redirect(`${appUrl}/?error=invalid_state`);
   }
   jar.delete("oauth_state");
 
   // Exchange code for token
-  const appUrl = process.env.APP_URL!;
   const tokenRes = await fetch("https://api.notion.com/v1/oauth/token", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Basic ${Buffer.from(
-        `${process.env.NOTION_CLIENT_ID}:${process.env.NOTION_CLIENT_SECRET}`
+        `${NOTION_CLIENT_ID}:${NOTION_CLIENT_SECRET}`
       ).toString("base64")}`,
     },
     body: JSON.stringify({
@@ -60,27 +74,38 @@ export async function GET(req: NextRequest) {
 
   const tokenData = (await tokenRes.json()) as {
     access_token: string;
-    workspace_name: string;
+    workspace_name: string | null;
   };
+  const workspaceName = tokenData.workspace_name || "your workspace";
 
   // Run workspace setup
   let result;
   try {
-    result = await runSetup(tokenData.access_token, tokenData.workspace_name);
+    result = await runSetup(tokenData.access_token, workspaceName);
   } catch (err) {
     console.error("Setup failed:", err);
-    const msg = err instanceof Error ? err.message : "setup_failed";
-    return NextResponse.redirect(
-      `${appUrl}/?error=${encodeURIComponent(msg)}`
-    );
+    return NextResponse.redirect(`${appUrl}/?error=setup_failed`);
   }
 
-  // Redirect to success page with result encoded in query params
-  const params = new URLSearchParams({
-    workspace: tokenData.workspace_name,
-    parentUrl: result.parentUrl,
-    configUrl: result.configUrl,
-    personasDbUrl: result.personasDbUrl,
+  // Hand the result (including the token, which is shown once) to the success
+  // page via a short-lived cookie so the token never appears in a URL.
+  const payload = Buffer.from(
+    JSON.stringify({
+      workspace: workspaceName,
+      token: tokenData.access_token,
+      parentUrl: result.parentUrl,
+      configUrl: result.configUrl,
+      personasDbUrl: result.personasDbUrl,
+      teamUrls: result.teamUrls,
+    })
+  ).toString("base64url");
+
+  jar.set("devquest_setup", payload, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "lax",
+    maxAge: 600,
+    path: "/",
   });
-  return NextResponse.redirect(`${appUrl}/install?${params.toString()}`);
+  return NextResponse.redirect(`${appUrl}/install`);
 }

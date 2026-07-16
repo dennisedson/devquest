@@ -1,4 +1,4 @@
-import { notionFetch, paragraph, richText } from "./notion";
+import { notionFetch, paragraph, labeledParagraph, richText } from "./notion";
 
 export interface SetupResult {
   parentUrl: string;
@@ -49,11 +49,12 @@ export async function runSetup(
         title: { title: richText("DevQuest Company Config") },
       },
       children: [
-        paragraph("**Languages:** TypeScript, Python"),
-        paragraph("**Frameworks:** React, FastAPI"),
-        paragraph("**Focus Areas:** automation, internal tooling, webhooks"),
-        paragraph(
-          "**Onboarding Notes:** Edit this page to reflect your actual stack. " +
+        labeledParagraph("Languages", "TypeScript, Python"),
+        labeledParagraph("Frameworks", "React, FastAPI"),
+        labeledParagraph("Focus Areas", "automation, internal tooling, webhooks"),
+        labeledParagraph(
+          "Onboarding Notes",
+          "Edit this page to reflect your actual stack. " +
             "The DevQuest agent reads it to personalize recommendations for every developer."
         ),
       ],
@@ -67,11 +68,12 @@ export async function runSetup(
       parent: { page_id: parent.id },
       properties: { title: { title: richText(teamName) } },
       children: [
-        paragraph("**Languages:** TypeScript"),
-        paragraph("**Frameworks:** React"),
-        paragraph("**Focus Areas:** internal tooling"),
-        paragraph(
-          `**Onboarding Notes:** Replace this with ${teamName}-specific context. ` +
+        labeledParagraph("Languages", "TypeScript"),
+        labeledParagraph("Frameworks", "React"),
+        labeledParagraph("Focus Areas", "internal tooling"),
+        labeledParagraph(
+          "Onboarding Notes",
+          `Replace this with ${teamName}-specific context. ` +
             "The agent reads this page when a developer says they're on this team."
         ),
       ],

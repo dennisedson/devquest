@@ -6,6 +6,7 @@ dist/
 # Next.js installer build output
 installer/.next/
 installer/node_modules/
+installer/next-env.d.ts
 
 # Temp / macOS noise
 *.tmp
