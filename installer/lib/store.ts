@@ -13,6 +13,7 @@ export interface InstallRecord {
 
 const installKeyOf = (key: string) => `install:${key}`;
 const botKeyOf = (botId: string) => `bot:${botId}`;
+const wsKeyOf = (workspaceId: string) => `ws:${workspaceId}`;
 
 /**
  * Persist a fresh authorization. If this bot (workspace connection) has been
@@ -37,7 +38,16 @@ export async function saveAuthorization(data: {
   };
   await r.set(installKeyOf(installKey), record);
   await r.set(botKeyOf(data.botId), installKey);
+  // Webhook events carry only a workspace_id — index installs by it too
+  await r.set(wsKeyOf(data.workspaceId), installKey);
   return record;
+}
+
+export async function getInstallByWorkspace(
+  workspaceId: string
+): Promise<InstallRecord | null> {
+  const installKey = await getKv().get<string>(wsKeyOf(workspaceId));
+  return installKey ? getInstall(installKey) : null;
 }
 
 export async function getInstall(
