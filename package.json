@@ -2,6 +2,9 @@
 	"name": "devquest",
 	"version": "0.0.0",
 	"private": true,
+	"bin": {
+		"devquest-setup": "./scripts/devquest-setup.mjs"
+	},
 	"scripts": {
 		"build": "tsc",
 		"check": "tsc --noEmit",

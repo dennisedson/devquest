@@ -36,16 +36,15 @@ export default async function InstallPage() {
   const { workspace, installKey, parentUrl, configUrl, personasDbUrl, teamUrls } = data;
   const appUrl = process.env.APP_URL ?? "";
 
-  const deployCommands = `# 1. Clone and deploy the worker
-git clone https://github.com/dennisedson/devquest && cd devquest
-ntn login
-npm install && npm run check && ntn workers deploy
+  const setupCommand = `npx --yes github:dennisedson/devquest ${installKey} ${appUrl}`;
 
-# 2. Point the worker at DevQuest (your install key, shown below only once)
+  const manualCommands = `# What the command above runs, step by step:
+git clone https://github.com/dennisedson/devquest && cd devquest
+npm install
+ntn login   # pick the SAME workspace you just installed into
+npm run check && ntn workers deploy
 ntn workers env set NOTION_API_TOKEN=${installKey}
 ntn workers env set NOTION_API_BASE_URL=${appUrl}/api/notion
-
-# 3. Trigger the knowledge base sync
 ntn workers sync trigger docs_index`;
 
   return (
@@ -82,25 +81,44 @@ ntn workers sync trigger docs_index`;
         <div style={{ background: "#fff", border: "1px solid #e5e5e5", borderRadius: 12, padding: "1.5rem", marginBottom: "1.5rem" }}>
           <p style={{ margin: "0 0 0.875rem", fontWeight: 600 }}>Two remaining steps:</p>
 
-          <p style={{ margin: "0 0 0.5rem", fontWeight: 500 }}>1. Deploy the worker (terminal)</p>
-          <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "#b45309" }}>
-            The <code>NOTION_API_TOKEN</code> below is your DevQuest install
-            key — it routes the worker through DevQuest, which keeps your
-            Notion tokens fresh automatically. It is shown only on this page,
-            so run (or save) these commands now. Treat it like a password.
-          </p>
+          <p style={{ margin: "0 0 0.5rem", fontWeight: 500 }}>1. Deploy the worker — one command (terminal)</p>
           <pre style={{
             background: "#f4f4f4",
             borderRadius: 6,
             padding: "0.875rem",
             fontSize: "0.8rem",
             overflowX: "auto",
-            margin: "0 0 1.25rem",
+            margin: "0 0 0.5rem",
             whiteSpace: "pre-wrap",
             wordBreak: "break-all",
           }}>
-            {deployCommands}
+            {setupCommand}
           </pre>
+          <p style={{ margin: "0 0 0.75rem", fontSize: "0.8125rem", color: "#b45309" }}>
+            The command contains your DevQuest install key — it routes the
+            worker through DevQuest, which keeps your Notion tokens fresh
+            automatically. It is shown only on this page, so run (or save) it
+            now, and treat it like a password. Requires the Notion CLI
+            (<code>curl -fsSL https://ntn.dev | bash</code>) and a Business+
+            plan with Workers enabled.
+          </p>
+          <details style={{ margin: "0 0 1.25rem" }}>
+            <summary style={{ fontSize: "0.8125rem", color: "#555", cursor: "pointer" }}>
+              Prefer to run the steps yourself?
+            </summary>
+            <pre style={{
+              background: "#f4f4f4",
+              borderRadius: 6,
+              padding: "0.875rem",
+              fontSize: "0.8rem",
+              overflowX: "auto",
+              margin: "0.5rem 0 0",
+              whiteSpace: "pre-wrap",
+              wordBreak: "break-all",
+            }}>
+              {manualCommands}
+            </pre>
+          </details>
 
           <p style={{ margin: "0 0 0.5rem", fontWeight: 500 }}>2. Create the Custom Agent (Notion UI)</p>
           <ol style={{ margin: 0, padding: "0 0 0 1.25rem", lineHeight: 2, color: "#444" }}>
