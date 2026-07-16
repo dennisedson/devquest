@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { createHmac, timingSafeEqual } from "crypto";
 import { runSetup } from "@/lib/setup";
+import { saveAuthorization } from "@/lib/store";
 
 // Setup makes ~6 sequential Notion API calls; don't let the default 10s limit cut it off.
 export const maxDuration = 60;
@@ -74,9 +75,29 @@ export async function GET(req: NextRequest) {
 
   const tokenData = (await tokenRes.json()) as {
     access_token: string;
+    refresh_token: string | null;
+    bot_id: string;
+    workspace_id: string;
     workspace_name: string | null;
   };
   const workspaceName = tokenData.workspace_name || "your workspace";
+
+  // Persist the token pair before doing anything else — Notion rotates
+  // refresh tokens, and losing this pair means the user must re-authorize.
+  let installKey: string;
+  try {
+    const record = await saveAuthorization({
+      botId: tokenData.bot_id,
+      workspaceId: tokenData.workspace_id,
+      workspaceName,
+      accessToken: tokenData.access_token,
+      refreshToken: tokenData.refresh_token ?? null,
+    });
+    installKey = record.installKey;
+  } catch (err) {
+    console.error("Failed to store authorization:", err);
+    return NextResponse.redirect(`${appUrl}/?error=storage_failed`);
+  }
 
   // Run workspace setup
   let result;
@@ -87,12 +108,12 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/?error=setup_failed`);
   }
 
-  // Hand the result (including the token, which is shown once) to the success
-  // page via a short-lived cookie so the token never appears in a URL.
+  // Hand the result to the success page via a short-lived cookie so the
+  // install key never appears in a URL.
   const payload = Buffer.from(
     JSON.stringify({
       workspace: workspaceName,
-      token: tokenData.access_token,
+      installKey,
       parentUrl: result.parentUrl,
       configUrl: result.configUrl,
       personasDbUrl: result.personasDbUrl,

@@ -3,6 +3,7 @@ const ERROR_MESSAGES: Record<string, string> = {
   missing_params: "Notion did not return the expected parameters. Please try again.",
   invalid_state: "The sign-in session expired or was invalid. Please try again.",
   token_exchange_failed: "Could not complete authorization with Notion. Please try again.",
+  storage_failed: "Connected to Notion, but saving the connection failed. Please try again.",
   setup_failed: "Connected to Notion, but creating the workspace pages failed. Please try again.",
 };
 

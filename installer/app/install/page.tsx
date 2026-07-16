@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 
 interface SetupPayload {
   workspace: string;
-  token: string;
+  installKey: string;
   parentUrl: string;
   configUrl: string;
   personasDbUrl: string;
@@ -26,23 +26,24 @@ export default async function InstallPage() {
     return (
       <main style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p>
-          This page has expired — the setup details (including your token) are
-          only shown once. <a href="/">Run the install again</a>
+          This page has expired — the setup details (including your install
+          key) are only shown once. <a href="/">Run the install again</a>
         </p>
       </main>
     );
   }
 
-  const { workspace, token, parentUrl, configUrl, personasDbUrl, teamUrls } = data;
+  const { workspace, installKey, parentUrl, configUrl, personasDbUrl, teamUrls } = data;
+  const appUrl = process.env.APP_URL ?? "";
 
   const deployCommands = `# 1. Clone and deploy the worker
 git clone https://github.com/dennisedson/devquest && cd devquest
 ntn login
 npm install && npm run check && ntn workers deploy
 
-# 2. Set the integration token (your DevQuest access token, shown below only once)
-ntn workers env set NOTION_API_TOKEN=${token}
-ntn workers env set NOTION_API_BASE_URL=https://api.notion.com
+# 2. Point the worker at DevQuest (your install key, shown below only once)
+ntn workers env set NOTION_API_TOKEN=${installKey}
+ntn workers env set NOTION_API_BASE_URL=${appUrl}/api/notion
 
 # 3. Trigger the knowledge base sync
 ntn workers sync trigger docs_index`;
@@ -83,9 +84,10 @@ ntn workers sync trigger docs_index`;
 
           <p style={{ margin: "0 0 0.5rem", fontWeight: 500 }}>1. Deploy the worker (terminal)</p>
           <p style={{ margin: "0 0 0.5rem", fontSize: "0.8125rem", color: "#b45309" }}>
-            The <code>NOTION_API_TOKEN</code> below is your access token — it is
-            shown only on this page, so run (or save) these commands now. Treat
-            it like a password.
+            The <code>NOTION_API_TOKEN</code> below is your DevQuest install
+            key — it routes the worker through DevQuest, which keeps your
+            Notion tokens fresh automatically. It is shown only on this page,
+            so run (or save) these commands now. Treat it like a password.
           </p>
           <pre style={{
             background: "#f4f4f4",
