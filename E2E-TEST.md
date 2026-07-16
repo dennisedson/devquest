@@ -7,6 +7,12 @@ with the phase/step number.
 **Terms used below**
 - **Master workspace** — your workspace; produces the central docs KB.
 - **Test workspace** — a separate workspace acting as the "customer."
+  ⚠️ Must be a DIFFERENT workspace than master (same Notion account is fine).
+  Installing/deploying into master overwrites the producer worker's env (its
+  sync would then consume its own feed and the KB silently freezes) and
+  creates duplicate-titled databases that break discovery-by-title everywhere.
+  Phases 4–6 need the test workspace on Business+ with Workers enabled;
+  phases 0–3 and 7 work on any plan.
 - `APP_URL` — `https://devquest.slowlybalding.com`
 - Logs — Vercel dashboard → project → Logs (every failure path logs its cause there).
 
