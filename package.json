@@ -3,6 +3,7 @@
 	"version": "0.0.0",
 	"private": true,
 	"bin": {
+		"devquest": "./scripts/devquest-setup.mjs",
 		"devquest-setup": "./scripts/devquest-setup.mjs"
 	},
 	"scripts": {
