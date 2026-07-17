@@ -17,7 +17,7 @@ import path from "node:path";
 const REPO_URL = "https://github.com/dennisedson/devquest.git";
 // TODO: drop the branch pin (here and on the success page) once
 // oauth-installer merges to main.
-const REPO_BRANCH = "oauth-installer";
+const REPO_BRANCH = "main";
 const CLONE_DIR = "devquest";
 
 const [installKey, installerUrl] = process.argv.slice(2);
@@ -90,7 +90,7 @@ run("Installing dependencies", "npm", ["install"], cwd);
 console.log("\nNext: log in to Notion. Make sure you pick the SAME workspace you installed DevQuest into.");
 run("Notion login", "ntn", ["login"], cwd);
 run("Type check", "npm", ["run", "check"], cwd);
-run("Deploying worker", "ntn", ["workers", "deploy"], cwd);
+run("Deploying worker", "ntn", ["workers", "deploy", "--name", "devquest"], cwd);
 
 // --- Point the worker at the DevQuest proxy ------------------------------------
 
