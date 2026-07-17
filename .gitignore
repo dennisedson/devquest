@@ -3,6 +3,9 @@ dist/
 .env
 .env.*
 
+# workers.json gets workspaceId/workerId written by ntn after deploy — keep out of repo
+workers.json
+
 # Next.js installer build output
 installer/.next/
 installer/node_modules/

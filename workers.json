@@ -1,6 +1,4 @@
 {
   "version": "1",
-  "environment": "prod",
-  "workspaceId": "f4111b19-5f6c-813d-93b5-00036940363c",
-  "workerId": "019f67fb-7c9e-7196-b65f-1ef2fa54b4ac"
+  "environment": "prod"
 }
